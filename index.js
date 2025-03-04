@@ -68,9 +68,9 @@ async function analyzeMessageWithChatGPT(userMessage) {
         const response = await axios.post(
             "https://api.openai.com/v1/chat/completions",
             {
-                model: "gpt-3.5-turbo",
+                model: "gpt-4-turbo",
                 messages: [
-                    { role: "system", content: "あなたは家庭用スマートホームアシスタントです。ユーザーの意図を分析し、お風呂を沸かすべきかを判断してください。" },
+                    { role: "system", content: "あなたは家庭用スマートホームアシスタントです。ユーザーのメッセージを解析し、お風呂を準備する指示かどうかを判定してください。\ 例えば、「お風呂を入れて」「お湯を張って」ならお風呂を準備するべきです。\ しかし、「トイレの準備をして」「洗面所を掃除して」はお風呂とは関係ありません。\ 回答は「お風呂を準備するべきです」または「お風呂を準備する必要はありません」のどちらかのみで答えてください。" },
                     { role: "user", content: userMessage }
                 ]
             },
@@ -90,7 +90,7 @@ async function analyzeMessageWithChatGPT(userMessage) {
         const aiResponse = response.data.choices[0].message.content;
         console.log(`🤖 ChatGPT Response: ${aiResponse}`);
 
-        return aiResponse.includes("沸かす") || aiResponse.includes("準備する") || aiResponse.includes("お風呂");
+        return aiResponse.includes("お風呂を準備するべきです");
     } catch (error) {
         console.error("🚨 ChatGPT API Error:", error.response ? error.response.data : error.message);
         return false; // エラーが出た場合は何もしない
@@ -124,4 +124,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
 });
-
