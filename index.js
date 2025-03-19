@@ -1,76 +1,48 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
+const mongoose = require("mongoose");
 
 const app = express();
 app.use(bodyParser.json());
 
-// ✅ `.env` は使わず、Railway の環境変数を直接使用
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
-const SWITCHBOT_TOKEN = process.env.SWITCHBOT_TOKEN;
-const DEVICE_ID = process.env.DEVICE_ID;
+// ✅ MongoDB 接続
+mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log("✅ MongoDB に接続成功！"))
+    .catch(err => console.error("🚨 MongoDB 接続エラー:", err));
 
-if (!SWITCHBOT_TOKEN || !LINE_ACCESS_TOKEN || !DEVICE_ID || !OPENAI_API_KEY) {
-    console.error("🚨 ERROR: 必要な環境変数が設定されていません！");
-    process.exit(1);
-}
+// ✅ 環境変数
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;  // 🔹 ChatGPT API 用
+const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;  // 🔹 LINE Bot 用
 
-// LINE Webhookエンドポイント
-app.post('/webhook', async (req, res) => {
-    const events = req.body.events;
+// ✅ MongoDB スキーマ
+const userSchema = new mongoose.Schema({
+    userId: { type: String, required: true, unique: true },
+    switchbotToken: { type: String },
+    devices: { type: Array, default: [] }
+});
 
-    for (const event of events) {
-        if (event.message && event.message.type === 'text') {
-            const userMessage = event.message.text;
+const User = mongoose.model("User", userSchema);
 
-            console.log(`📩 受信したメッセージ: ${userMessage}`);
+const userRegistrationState = new Map(); // 🔹 ユーザーの登録状態を管理
 
-            // 🔹 ChatGPT API を使ってメッセージを解析
-            const shouldTurnOnBath = await analyzeMessageWithChatGPT(userMessage);
-
-            if (shouldTurnOnBath) {
-                try {
-                    console.log(`🚀 Sending turnOn command to SwitchBot...`);
-                    const response = await axios.post(
-                        `https://api.switch-bot.com/v1.0/devices/${DEVICE_ID}/commands`,
-                        {
-                            command: 'turnOn',
-                            parameter: 'default',
-                            commandType: 'command'
-                        },
-                        {
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${SWITCHBOT_TOKEN}`
-                            }
-                        }
-                    );
-                    console.log("✅ SwitchBot API Response:", response.data);
-                    await replyMessage(event.replyToken, 'お湯張りを開始しました！');
-                } catch (error) {
-                    console.error("🚨 SwitchBot API Error:", error.response ? error.response.data : error.message);
-                    await replyMessage(event.replyToken, 'エラーが発生しました。');
-                }
-            } else {
-                await replyMessage(event.replyToken, '「お風呂を準備して」「お風呂を入れて」などと送ると起動します。');
-            }
-        }
-    }
-
-    res.sendStatus(200);
-})
-
-// 🔹 ChatGPT API を使ってメッセージを解析
-async function analyzeMessageWithChatGPT(userMessage) {
+// ✅ ChatGPT にメッセージを送る関数
+async function analyzeMessageWithChatGPT(userMessage, userDevices) {
     try {
         console.log(`🤖 ChatGPT にリクエスト: ${userMessage}`);
+
         const response = await axios.post(
             "https://api.openai.com/v1/chat/completions",
             {
                 model: "gpt-4-turbo",
                 messages: [
-                    { role: "system", content: "あなたは家庭用スマートホームアシスタントです。ユーザーのメッセージを解析し、お風呂を準備する指示かどうかを判定してください。\ 例えば、「お風呂を入れて」「お湯を張って」ならお風呂を準備するべきです。\ しかし、「トイレの準備をして」「洗面所を掃除して」はお風呂とは関係ありません。\ 回答は「お風呂を準備するべきです」または「お風呂を準備する必要はありません」のどちらかのみで答えてください。" },
+                    { role: "system", content: `あなたはスマートホームアシスタントです。\
+                        ユーザーの家には次のデバイスがあります: ${JSON.stringify(userDevices.map(d => d.deviceName)) || "不明"}。\
+                        ユーザーのメッセージが「家電の操作」か「スマートホームの質問」かを判定し、\
+                        JSON 形式で返答してください。\
+                        - 「家電の操作」なら \`{ "type": "device_control", "commands": [{ "device": "<適切なデバイス名>", "action": "turnOn" }] }\`\
+                        - 「スマートホームの質問」なら \`{ "type": "smart_home_help", "answer": "SwitchBotのペアリング方法は..." }\`\
+                        - 何も対応しない場合は \`{ "type": "none" }\` を返してください。` },
                     { role: "user", content: userMessage }
                 ]
             },
@@ -82,45 +54,96 @@ async function analyzeMessageWithChatGPT(userMessage) {
             }
         );
 
-        if (!response.data.choices || !response.data.choices[0] || !response.data.choices[0].message) {
-            console.error("🚨 ChatGPT API のレスポンスが無効です。");
-            return false;
-        }
-
-        const aiResponse = response.data.choices[0].message.content;
-        console.log(`🤖 ChatGPT Response: ${aiResponse}`);
-
-        return aiResponse.includes("お風呂を準備するべきです");
+        return JSON.parse(response.data.choices[0].message.content);
     } catch (error) {
         console.error("🚨 ChatGPT API Error:", error.response ? error.response.data : error.message);
-        return false; // エラーが出た場合は何もしない
+        return { type: "none" };
     }
 }
 
-// LINEに返信する関数
-async function replyMessage(replyToken, text) {
-    try {
-        const response = await axios.post(
-            'https://api.line.me/v2/bot/message/reply',
-            {
-                replyToken: replyToken,
-                messages: [{ type: 'text', text: text }]
-            },
-            {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${LINE_ACCESS_TOKEN}`
-                }
+// ✅ LINE Webhookエンドポイント
+app.post('/webhook', async (req, res) => {
+    const events = req.body.events;
+
+    for (const event of events) {
+        if (event.type === "follow") {
+            const userId = event.source.userId;
+            await replyMessage(userId, 
+                "こんにちは！このLINE Botでは、お家の家電を操作したり、スマートホームに関する質問をすることができます。\n\n"
+                + "🏠 **家電を操作したい場合** → 「登録」と送信してください。その後、SwitchBot APIキーを送信すると、あなたの家電を操作できるようになります。\n\n"
+                + "❓ **スマートホームの質問をしたい場合** → そのまま質問内容を送信してください！（例：「SwitchBotのペアリング方法は？」）"
+            );
+            continue;
+        }
+
+        if (event.message && event.message.type === 'text') {
+            const userId = event.source.userId;
+            const userMessage = event.message.text;
+
+            if (userMessage === "登録") {
+                userRegistrationState.set(userId, true);
+                await replyMessage(event.replyToken, "🔑 SwitchBot APIキーを送信してください。");
+                continue;
             }
-        );
-        console.log("✅ LINEに返信成功");
-    } catch (error) {
-        console.error("🚨 LINE API Error:", error.response ? error.response.data : error.message);
-    }
-}
 
-// サーバー起動
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT}`);
+            if (userRegistrationState.get(userId)) {
+                const switchbotToken = userMessage.trim();
+
+                if (switchbotToken.length <= 60) {
+                    await replyMessage(event.replyToken, "⚠️ 無効なAPIキーです。APIキーは **60文字以上** である必要があります。もう一度送信してください。");
+                    continue;
+                }
+
+                if (!/^[A-Za-z0-9]+$/.test(switchbotToken)) {
+                    await replyMessage(event.replyToken, "⚠️ 無効なAPIキーです。APIキーは **半角英数字のみ** である必要があります。もう一度送信してください。");
+                    continue;
+                }
+
+                try {
+                    const devices = await fetchSwitchBotDevices(switchbotToken);
+                    await User.findOneAndUpdate(
+                        { userId: userId },
+                        { switchbotToken: switchbotToken, devices: devices },
+                        { upsert: true, new: true }
+                    );
+
+                    userRegistrationState.delete(userId);
+                    await replyMessage(event.replyToken, "✅ SwitchBotとの連携が正常に完了しました！\n\n「リビングの電気つけて」など、家電を操作してみてください！");
+                } catch (error) {
+                    await replyMessage(event.replyToken, "⚠️ APIキーの登録に失敗しました。正しいAPIキーを入力してください。");
+                }
+                continue;
+            }
+
+            const user = await User.findOne({ userId: userId });
+            const chatGPTResponse = await analyzeMessageWithChatGPT(userMessage, user ? user.devices : []);
+
+            if (chatGPTResponse.type === "device_control") {
+                if (!user || !user.switchbotToken) {
+                    await replyMessage(event.replyToken, "家電を操作するには、まず「登録」と送信して APIキーを入力してください。");
+                    continue;
+                }
+
+                for (const command of chatGPTResponse.commands) {
+                    const device = user.devices.find(d => d.deviceName === command.device);
+                    if (device) {
+                        await axios.post(
+                            `https://api.switch-bot.com/v1.0/devices/${device.deviceId}/commands`,
+                            { command: command.action, parameter: 'default', commandType: 'command' },
+                            { headers: { 'Content-Type': 'application/json', 'Authorization": `Bearer ${user.switchbotToken}` } }
+                        );
+                    }
+                }
+                await replyMessage(event.replyToken, "家電を操作しました！");
+            } else if (chatGPTResponse.type === "smart_home_help") {
+                await replyMessage(event.replyToken, chatGPTResponse.answer);
+            }
+        }
+    }
+
+    res.sendStatus(200);
 });
+
+// ✅ サーバー起動
+app.listen(3000, () => console.log("🚀 Server is running on port 3000"));
+
