@@ -35,7 +35,8 @@ async function analyzeMessageWithChatGPT(userMessage, userDevices) {
             "https://api.openai.com/v1/chat/completions",
             {
                 model: "gpt-4-turbo",
-                max_tokens: 1000,
+                max_tokens: 1000, // 🔹 長文対応
+                temperature: 0.3, // 🔹 創造性を抑えて、よりフォーマット通りに返答
                 messages: [
                     { role: "system", content: `あなたはスマートホームアシスタントです。\
                         ユーザーの家には次のデバイスがあります: ${JSON.stringify(userDevices.map(d => d.deviceName)) || "不明"}。\
@@ -43,6 +44,8 @@ async function analyzeMessageWithChatGPT(userMessage, userDevices) {
                         JSON 形式で返答してください。\
                         - 「家電の操作」なら \`{ "type": "device_control", "commands": [{ "device": "<適切なデバイス名>", "action": "turnOn" }] }\`\
                         - 「スマートホームの質問」なら \`{ "type": "smart_home_help", "answer": "SwitchBotのペアリング方法は..." }\`\
+                        - 🔹 回答が途中で切れないように、全文を出力してください！\
+                        - 🔹 「...」で終わる回答は無効です。具体的な手順をすべて記載してください！\
                         - 何も対応しない場合は \`{ "type": "none" }\` を返してください。` },
                     { role: "user", content: userMessage }
                 ]
@@ -127,6 +130,16 @@ app.post('/webhook', async (req, res) => {
             if (userMessage === "登録") {
                 userRegistrationState.set(userId, true);
                 await replyMessage(event.replyToken, "🔑 SwitchBot APIキーを送信してください。");
+                continue;
+            }
+
+            if (userMessage === "キャンセル") {
+                if (userRegistrationState.has(userId)) {
+                    userRegistrationState.delete(userId);
+                    await replyMessage(event.replyToken, "🔹 APIキーの登録をキャンセルしました。\n\nスマートホームの質問をしたい場合は、そのまま質問してください！");
+                } else {
+                    await replyMessage(event.replyToken, "🔹 現在、APIキー登録待ちではありません。\n\n質問があれば、そのまま入力してください！");
+                }
                 continue;
             }
 
