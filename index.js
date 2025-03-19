@@ -130,7 +130,7 @@ app.post('/webhook', async (req, res) => {
                         await axios.post(
                             `https://api.switch-bot.com/v1.0/devices/${device.deviceId}/commands`,
                             { command: command.action, parameter: 'default', commandType: 'command' },
-                            { headers: { 'Content-Type': 'application/json', 'Authorization": `Bearer ${user.switchbotToken}` } }
+                            { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.switchbotToken}` } }
                         );
                     }
                 }
