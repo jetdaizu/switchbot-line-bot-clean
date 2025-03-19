@@ -61,6 +61,28 @@ async function analyzeMessageWithChatGPT(userMessage, userDevices) {
     }
 }
 
+// ✅ LINE に返信する関数
+async function replyMessage(replyToken, text) {
+    try {
+        await axios.post(
+            'https://api.line.me/v2/bot/message/reply',
+            {
+                replyToken: replyToken,
+                messages: [{ type: 'text', text: text }]
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${LINE_ACCESS_TOKEN}`
+                }
+            }
+        );
+    } catch (error) {
+        console.error("🚨 LINE API Error:", error.response ? error.response.data : error.message);
+    }
+}
+
+
 // ✅ LINE Webhookエンドポイント
 app.post('/webhook', async (req, res) => {
     const events = req.body.events;
