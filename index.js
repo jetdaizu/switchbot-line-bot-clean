@@ -116,8 +116,7 @@ app.post('/webhook', async (req, res) => {
         if (event.type === "follow") {
             const userId = event.source.userId;
             await pushMessage(userId, 
-                "こんにちは！このLINE Botでは、お家の家電を操作したり、スマートホームに関する質問をすることができます。\n\n"
-                + "🏠 **家電を操作したい場合** → 「登録」と送信してください。その後、SwitchBot APIキーを送信すると、あなたの家電を操作できるようになります。\n\n"
+                "こんにちは！このLINE Botでは、スマートホームに関する質問をすることができます。\n\n"
                 + "❓ **スマートホームの質問をしたい場合** → そのまま質問内容を送信してください！（例：「SwitchBotのペアリング方法は？」）"
             );
             continue;
