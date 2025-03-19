@@ -35,6 +35,7 @@ async function analyzeMessageWithChatGPT(userMessage, userDevices) {
             "https://api.openai.com/v1/chat/completions",
             {
                 model: "gpt-4-turbo",
+                max_tokens: 1000,
                 messages: [
                     { role: "system", content: `あなたはスマートホームアシスタントです。\
                         ユーザーの家には次のデバイスがあります: ${JSON.stringify(userDevices.map(d => d.deviceName)) || "不明"}。\
