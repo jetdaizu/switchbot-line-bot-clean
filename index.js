@@ -82,6 +82,27 @@ async function replyMessage(replyToken, text) {
     }
 }
 
+// ✅ LINE にプッシュメッセージを送る関数（友達追加時など）
+async function pushMessage(userId, text) {
+    try {
+        await axios.post(
+            'https://api.line.me/v2/bot/message/push',
+            {
+                to: userId,
+                messages: [{ type: 'text', text: text }]
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${LINE_ACCESS_TOKEN}`
+                }
+            }
+        );
+    } catch (error) {
+        console.error("🚨 LINE API Error (Push Message):", error.response ? error.response.data : error.message);
+    }
+}
+
 
 // ✅ LINE Webhookエンドポイント
 app.post('/webhook', async (req, res) => {
@@ -90,7 +111,7 @@ app.post('/webhook', async (req, res) => {
     for (const event of events) {
         if (event.type === "follow") {
             const userId = event.source.userId;
-            await replyMessage(userId, 
+            await pushMessage(userId, 
                 "こんにちは！このLINE Botでは、お家の家電を操作したり、スマートホームに関する質問をすることができます。\n\n"
                 + "🏠 **家電を操作したい場合** → 「登録」と送信してください。その後、SwitchBot APIキーを送信すると、あなたの家電を操作できるようになります。\n\n"
                 + "❓ **スマートホームの質問をしたい場合** → そのまま質問内容を送信してください！（例：「SwitchBotのペアリング方法は？」）"
