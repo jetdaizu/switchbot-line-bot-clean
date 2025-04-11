@@ -137,7 +137,7 @@ app.post('/webhook', async (req, res) => {
                 + "このチャットボットの回答はAIによる自動応答のため、内容に誤りを含む可能性があります。正確な情報は、製品の公式FAQや取扱説明書をご確認ください。\n\n"
                 + "🔗 SwitchBot公式サポート：https://support.switch-bot.com/\n"
                 + "🔗 Amazon Alexaヘルプ：https://www.amazon.co.jp/alexasupport\n\n"
-                + "※スマートホーム関連以外のご質問には対応していません。"
+                + "※スマートホーム関連以外のご質問は回答が無い仕様になっております。"
             );
             continue;
         }
